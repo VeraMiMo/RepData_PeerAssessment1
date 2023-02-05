@@ -1,0 +1,136 @@
+# Evaluation of activity data
+
+
+## Loading and processing the data  
+To enable a weekday-specific evaluation, a column with corresponding weekdays for every date was added.
+
+```{r, echo = TRUE, warning = FALSE, message = FALSE}
+library(ggplot2)
+library(data.table)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+
+activity.data <- setDT(read.csv("activity.csv"))
+activity.data$weekday <- wday(activity.data$date,label = TRUE,abbr = FALSE)
+```
+
+## Mean number of steps taken per day  
+The sum of steps taken each day was calculated and the result was plotted as histogram.
+Mean and median number of steps taken each day were calculated.
+
+```{r, echo = TRUE, warning = FALSE}
+steps <- activity.data %>%
+        group_by(date) %>%
+        summarise(sum_steps_per_day = sum(steps))
+
+steps_per_day <- hist(steps$sum_steps_per_day, col = "lightgray", plot = TRUE, 
+                      xlab = "sum of steps per day", 
+                      main = "Histogram of steps per day")
+
+median_steps_per_day <- quantile(steps$sum_steps_per_day, probs = 0.5, na.rm = TRUE)
+mean_steps_per_day <- mean(steps$sum_steps_per_day, na.rm = TRUE)
+```
+
+The count of steps taken per day appears to be normally distributed.  
+The median of steps taken per day is `r median_steps_per_day`, the mean is `r mean_steps_per_day`.
+
+## Analysis of daily activity pattern  
+The mean of steps taken at each interval was calculated and the result was plotted as time series.
+
+```{r, echo = TRUE, warning = FALSE}
+intervals <- activity.data %>%
+        group_by(interval) %>%
+        summarise(steps_per_interval = mean(steps, na.rm = TRUE))
+interval_plot <- 
+        ggplot(data = intervals, aes(x = interval, y = steps_per_interval)) +
+        geom_line()
+interval_plot
+
+max_steps <- max(intervals$steps_per_interval, na.rm = TRUE)
+max_interval_dt <- intervals[intervals$steps_per_interval == max_steps, ]
+max_interval <- unlist(max_interval_dt[1,1])
+```
+
+The average of steps taken per five minute interval fluctuates between 0 and `r max_steps`. The interval with the highest average of steps is: `r max_interval`
+
+## Check for missing data  
+The data was visualized as heat map to check for missing data. Missing data is colored in grey.
+
+```{r, echo = TRUE, fig.height=10, fig.width=10, warning = FALSE}
+plot_missing <- 
+        ggplot(data = activity.data, aes(x = interval, y = date, fill = steps)) +
+        geom_tile() +
+        theme(axis.text.y = element_blank(), axis.ticks.y = element_blank(), 
+              panel.background = element_rect(fill = "white", color = "white")) +
+        facet_wrap(vars(weekday))
+plot_missing
+```
+
+Data for eight whole days is missing from the dataset.Several weekdays are affected by missing data.
+
+### Imputing missing values  
+Missing values will be replaced by the median per interval for the specific weekday.A new histogram including the imputed data is shown.
+
+```{r, echo = TRUE, warning = FALSE}
+weekday_vector <- unique(activity.data$weekday)
+imputed_missing <- as.data.table(matrix(nrow =0, ncol = 4))
+colnames(imputed_missing) <- names(activity.data)
+for (i in weekday_vector) {
+        temp_dt <- activity.data[weekday == i,]
+        temp_dt[, steps:= ifelse(is.na(steps), mean(steps, na.rm = TRUE),steps),
+                      by = interval]
+        imputed_missing <- rbind(imputed_missing, temp_dt)
+}  
+steps2 <- imputed_missing %>%
+        group_by(date) %>%
+        summarise(steps_per_day = sum(steps))
+
+steps_per_day2 <- hist(steps2$steps_per_day, plot = TRUE,
+                       xlab = "sum of steps per day", 
+                       main = "Histogram after imputing missing values")
+median_steps_per_day2 <- quantile(steps2$steps_per_day, probs = 0.5, na.rm = TRUE)
+mean_steps_per_day2 <- mean(steps2$steps_per_day, na.rm = TRUE)
+
+```
+The count of steps taken per day appears to be normally distributed.  
+The median of steps taken per day is `r median_steps_per_day2`, the mean is `r mean_steps_per_day2`. Distribution, mean and median of the dataset with imputed missing values are very close to the original dataset. 
+
+## Differences in activity patterns between weekdays and weekends  
+The calculation of mean steps per 5 minutes intervals was recalculated separately for weekdays and weekends.The dataset with filled-in missing values was used.
+
+```{r, echo = TRUE, warning = FALSE, message = FALSE, fig.height=10, fig.width=10,}
+
+imputed_missing$weekend <- imputed_missing$weekday
+imputed_missing$weekend <- gsub("Sonntag", "weekend", imputed_missing$weekend)
+imputed_missing$weekend <- gsub("Samstag", "weekend", imputed_missing$weekend)
+imputed_missing$weekend <- gsub("Montag", "weekday", imputed_missing$weekend)
+imputed_missing$weekend <- gsub("Dienstag", "weekday", imputed_missing$weekend)
+imputed_missing$weekend <- gsub("Mittwoch", "weekday", imputed_missing$weekend)
+imputed_missing$weekend <- gsub("Donnerstag", "weekday", imputed_missing$weekend)
+imputed_missing$weekend <- gsub("Freitag", "weekday", imputed_missing$weekend)
+weekend_summary <- imputed_missing %>%
+        group_by(interval, weekend) %>%
+        summarise(mean_steps_per_interval = mean(steps, na.rm = TRUE),
+                  median_steps_per_interval = median(steps, na.rm = TRUE))
+colors <- c("mean" = "blue", "median" = "red")
+
+weekend_plot <-
+        ggplot(data = weekend_summary) +
+        geom_line(aes(x = interval, y = mean_steps_per_interval,  
+                      color = "mean")) +
+        geom_line(aes(x = interval, y = median_steps_per_interval, 
+                      color = "median")) +
+        labs(y = "steps per interval", color = "plotted value") +
+        scale_color_manual(values = colors) +
+        facet_wrap(vars(weekend))
+weekend_plot
+```
+
+The time course of mean steps taken per interval is different between weekdays and weekends.Furthermore, the median of steps taken per day is very different from the mean value, indicating a skewed distribution.
+
+
+
+
+
+ 
