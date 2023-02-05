@@ -11,8 +11,6 @@ library(dplyr)
 library(tidyr)
 library(lubridate)
 
-setwd("C:/Users/VeraM/Desktop/Reproducible Research Course Project 1")
-
 activity.data <- setDT(read.csv("activity.csv"))
 activity.data$weekday <- wday(activity.data$date,label = TRUE,abbr = FALSE)
 ```
